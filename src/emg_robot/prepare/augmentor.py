@@ -5,7 +5,7 @@ import pandas as pd
 from scipy.signal import butter, lfilter
 from imusensor.filters import kalman
 import pywt
-from features import all_features
+from emg_robot.prepare.features import all_features
 
 
 EMG_RES = 2**12  # 12bit ADC

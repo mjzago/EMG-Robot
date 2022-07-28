@@ -6,7 +6,7 @@ from torch import addr
 import smbus 
 from frankx import Robot, JointMotion
 from utils import CircularBuffer
-import features
+import emg_robot.prepare.features as features
 
 
 emg_buffer_size = 50
