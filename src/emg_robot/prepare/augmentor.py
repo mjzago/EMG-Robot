@@ -39,7 +39,7 @@ def calc_features(df):
     ret = pd.DataFrame(np.empty([1, len(index)]), columns=index)
     for f in all_features:
         for c in df.columns[1:]:
-            ret[c + '_' + f.__name__][0] = f(df[c])
+            ret[c + '_' + f.__name__.split('_', 1)[1]][0] = f(df[c])
     return ret
 
 
