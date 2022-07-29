@@ -51,14 +51,22 @@ def calc_emg_wavelet_features(coeffs, label):
     return f
 
 
+def calc_window_params(source_len):
+    window_offset = int(WINDOW_LENGTH - WINDOW_OVERLAP)
+    # Make sure that the final window can be long enough. Trailing values will be ignored
+    return int(source_len // window_offset - WINDOW_LENGTH / window_offset + 1), window_offset
+
+
+def get_window_indices(num_windows, target_len):
+    return np.repeat(np.arange(num_windows), target_len)
+
+
 def calc_emg_wavelets(df):
     print(' >  Discrete wavelet decompositions... ', end='', flush=True)
     now = time.time()
 
     cols = df.columns
-    window_offset = int(WINDOW_LENGTH - WINDOW_OVERLAP)
-    # Make sure that the final window can be long enough. Trailing values will be ignored
-    num_windows = int(df.shape[0] // window_offset - WINDOW_LENGTH / window_offset + 1)
+    num_windows, window_offset = calc_window_params(df.shape[0])
 
     wavelet = pywt.Wavelet('db1')
     cf_len1 = int(np.floor((WINDOW_LENGTH + wavelet.dec_len - 1) / 2))
@@ -69,9 +77,9 @@ def calc_emg_wavelets(df):
     cD1 = np.empty([cf_len1 * num_windows, len(cols) + 1])
 
     # Window index for easier grouping
-    cA2[:,0] = np.repeat(np.arange(num_windows), cf_len2).astype(np.int16)
-    cD2[:,0] = np.repeat(np.arange(num_windows), cf_len2).astype(np.int16)
-    cD1[:,0] = np.repeat(np.arange(num_windows), cf_len1).astype(np.int16)
+    cA2[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
+    cD2[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
+    cD1[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
 
     for i in range(num_windows):
         for c_idx,c in enumerate(cols):
@@ -146,8 +154,7 @@ def calc_imu_orientation(df, method='kalman', acc_c=['acc_x', 'acc_y', 'acc_z'],
 
 def calc_imu_orientation_windowed(df):
     # Calculate the IMU mean for every EMG window so that we have one target value per window
-    window_offset = int(WINDOW_LENGTH - WINDOW_OVERLAP)
-    num_windows = int(df.shape[0] // window_offset - WINDOW_LENGTH / window_offset + 1)
+    num_windows, window_offset = calc_window_params(df.shape[0])
     owin = np.empty([num_windows, 2])
 
     print('  > Windowing IMU angles... ', end='', flush=True)
