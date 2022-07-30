@@ -44,7 +44,7 @@ class RNNModel(torch.nn.Module):
         return out, hidden
 
 
-def load_data(dir):
+def load_data(dir, files=None):
     # Group files by common prefix
     regex = re.compile(r'(.*)_(c[AD][12])_features\.csv')
     sets = OrderedDict()
