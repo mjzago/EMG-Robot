@@ -5,10 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "main",
+            "name": "preprocess",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py",
+            "program": "${workspaceFolder}/src/main.py --preprocess ${workspaceFolder}/test/",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "train",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py --train ${workspaceFolder}/test/",
             "console": "integratedTerminal",
             "justMyCode": true
         }

@@ -1,11 +1,74 @@
-from emg_robot.ai import load_data, train, save_model
+import os
+from argparse import ArgumentParser
+
+
+def do_recording(args):
+    # from emg_robot.recording import
+    # TODO
+    raise NotImplementedError()
+
+
+def do_preprocessing(args):
+    from emg_robot.preprocessing import process_recordings
+
+    process_recordings(os.path.join(args.data_dir, 'recordings/'),
+                       os.path.join(args.data_dir, 'preprocessed/'))
+
+
+def do_training(args):
+    from emg_robot.ai import load_data, save_model, train
+
+    data, gt = load_data(os.path.join(args.data_dir, 'preprocessed/'))
+    model = train(data, gt)
+    model_file = save_model(model, args.data_dir)
+
+    print(f'Saved model to {model_file}')
+
+
+def do_simulate(args):
+    # TODO
+    raise NotImplementedError()
+
+
+def do_control(args):
+    # from emg_robot.robot import
+    # TODO
+    raise NotImplementedError()
 
 
 if __name__ == '__main__':
-    data_dir = '/home/dfki.uni-bremen.de/ndahn/devel/TODOTODO/recordings/'
-    
-    data, gt = load_data(data_dir)
-    model = train(data, gt)
-    model_file = save_model(model, data_dir)
+    parser = ArgumentParser()
 
-    print(f'Saved model to {model_file}')
+    # parser.add_argument("-r", "--record", dest="do_recording",
+    #    help="Start recording samples from the EMG sensors until XXX")
+    parser.add_argument("-p", "--preprocess", dest="do_preprocessing", action='store_true',
+                        help="Preprocess a folder of previously recorded EMG data "
+                             "(load data from data_dir/recordings/ and save data to data_dir/preprocessed/)")
+    parser.add_argument("-t", "--train", dest="do_training", action='store_true',
+                        help="Train an AI model on the preprocessed data "
+                             "(load data from data_dir/preprocessed and save model to data_dir/)")
+    parser.add_argument("-s", "--simulate", dest="do_simulate", action='store_true',
+                        help="Use a trained AI model to classify live EMG data without a robot attached "
+                             "(load model from data_dir/)")
+    parser.add_argument("-c", "--control", dest="do_control", action='store_true',
+                        help="Use a trained AI model to classify live EMG data and control a robot "
+                             "(load model from data_dir/)")
+    parser.add_argument("data_dir",
+                        help="The base folder to load from and store data in")
+
+    args = parser.parse_args()
+
+    if "do_recording" in args:
+        do_recording(args)
+
+    if "do_preprocessing" in args:
+        do_preprocessing(args)
+
+    if "do_training" in args:
+        do_training(args)
+
+    if "do_simulate" in args:
+        do_simulate(args)
+
+    if "do_control" in args:
+        do_control(args)

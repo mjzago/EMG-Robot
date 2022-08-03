@@ -1,16 +1,14 @@
-from soupsieve import match
+import os
+import re
+import time
+from collections import OrderedDict
+
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
-import pandas as pd
-from collections import OrderedDict
-import re
-import time
-import os
 
-from emg_robot.prepare.features import all_features
-
+from ..preprocessing.features import all_features
 
 BATCH_SIZE = 4  # Number of data batches when training
 NUM_LAYERS = 1  # How many stacks the RNN should have

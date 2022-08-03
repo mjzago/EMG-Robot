@@ -1,12 +1,13 @@
 import os
 import time
+
 import numpy as np
 import pandas as pd
-from scipy.signal import butter, lfilter
-from imusensor.filters import kalman
 import pywt
-from emg_robot.prepare.features import all_features
+from imusensor.filters import kalman
+from scipy.signal import butter, lfilter
 
+from .features import all_features
 
 EMG_RES = 2**12  # 12bit ADC
 # TODO adjust
@@ -34,12 +35,16 @@ def filter_butterworth(data, lowcut, highcut, fs, order=5):
     return y
 
 
+def get_col_label(channel, feature):
+    return f"{channel}_{feature.split('_', 1)[1]}"
+
+
 def calc_features(df):
-    index = [c + '_' + f.__name__ for c in df.columns[1:] for f in all_features]
+    index = [get_col_label(c, f.__name__) for c in df.columns[1:] for f in all_features]
     ret = pd.DataFrame(np.empty([1, len(index)]), columns=index)
     for f in all_features:
         for c in df.columns[1:]:
-            ret[c + '_' + f.__name__.split('_', 1)[1]][0] = f(df[c])
+            ret[get_col_label(c, f.__name__)][0] = f(df[c])
     return ret
 
 
@@ -79,7 +84,7 @@ def calc_emg_wavelets(df):
     # Window index for easier grouping
     cA2[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
     cD2[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
-    cD1[:,0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
+    cD1[:,0] = get_window_indices(num_windows, cf_len1).astype(np.int16)
 
     for i in range(num_windows):
         for c_idx,c in enumerate(cols):
@@ -180,9 +185,9 @@ def calc_imu_features(df, outdir, basename, method='simple', dt=1/1496):
 
 def process_recordings(recordings_dir, out_dir=None):
     if not out_dir:
-        out_dir = os.path.join(recordings_dir, 'features')
-        os.makedirs(out_dir, exist_ok=True)
-
+        out_dir = os.path.join(recordings_dir, 'preprocessed')
+    
+    os.makedirs(out_dir, exist_ok=True)
     for emg_f in os.listdir(recordings_dir):
         if not emg_f.endswith('.csv'):
             continue
@@ -195,7 +200,3 @@ def process_recordings(recordings_dir, out_dir=None):
         calc_emg_features(df, out_dir, basename)
         calc_imu_features(df, out_dir, basename)
         print(f'done ({time.time() - now : .3f}s)\n')
-
-
-if __name__ == '__main__':
-    process_recordings('recordings/test/')
