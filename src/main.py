@@ -18,8 +18,8 @@ def do_preprocessing(args):
 def do_training(args):
     from emg_robot.ai import load_data, save_model, train
 
-    data, gt = load_data(os.path.join(args.data_dir, 'preprocessed/'))
-    model = train(data, gt)
+    data = load_data(os.path.join(args.data_dir, 'preprocessed/'))
+    model = train(data)
     model_file = save_model(model, args.data_dir)
 
     print(f'Saved model to {model_file}')
@@ -39,8 +39,8 @@ def do_control(args):
 if __name__ == '__main__':
     parser = ArgumentParser()
 
-    # parser.add_argument("-r", "--record", dest="do_recording",
-    #    help="Start recording samples from the EMG sensors until XXX")
+    parser.add_argument("-r", "--record", dest="do_recording",
+                        help="Start recording samples from the EMG sensors until XXX")
     parser.add_argument("-p", "--preprocess", dest="do_preprocessing", action='store_true',
                         help="Preprocess a folder of previously recorded EMG data "
                              "(load data from data_dir/recordings/ and save data to data_dir/preprocessed/)")
@@ -58,17 +58,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if "do_recording" in args:
+    if args.do_recording:
         do_recording(args)
 
-    if "do_preprocessing" in args:
+    if args.do_preprocessing:
         do_preprocessing(args)
 
-    if "do_training" in args:
+    if args.do_training:
         do_training(args)
 
-    if "do_simulate" in args:
+    if args.do_simulate:
         do_simulate(args)
 
-    if "do_control" in args:
+    if args.do_control:
         do_control(args)

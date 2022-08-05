@@ -8,7 +8,8 @@
             "name": "preprocess",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py --preprocess ${workspaceFolder}/test/",
+            "program": "${workspaceFolder}/src/main.py",
+            "args": ["--preprocess", "${workspaceFolder}/test/"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -16,7 +17,8 @@
             "name": "train",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py --train ${workspaceFolder}/test/",
+            "program": "${workspaceFolder}/src/main.py",
+            "args": ["--train", "${workspaceFolder}/test/"],
             "console": "integratedTerminal",
             "justMyCode": true
         }

@@ -3,6 +3,7 @@ import re
 import time
 from collections import OrderedDict
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -10,10 +11,10 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ..preprocessing.features import all_features
 
-BATCH_SIZE = 4  # Number of data batches when training
+BATCH_SIZE = 4  # Number of data batches when training (should be a power of 2)
+SEQ_LENGTH = 5  # The number of EMG windows to consider (i.e. how far back the RNN will remember)
 NUM_LAYERS = 1  # How many stacks the RNN should have
-LOOKBACK_STEPS = 5  # Number of windows to consider
-HIDDEN_SIZE = 100  # TODO can probably be much smaller
+HIDDEN_SIZE = 128  # TODO can probably be smaller (should be a power of ?2)
 OUTPUT_SIZE = 2  # pitch & roll of the forearm
 
 NUM_FEATURES = len(all_features)
@@ -28,18 +29,20 @@ class RNNModel(torch.nn.Module):
 
         # See https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
         self.rnn = nn.RNN(input_size=NUM_INPUT_FEATURES, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, bidirectional=True, batch_first=True)
-        self.fc = nn.Linear(HIDDEN_SIZE, OUTPUT_SIZE)
+        self.fc = nn.Linear(2 * HIDDEN_SIZE, OUTPUT_SIZE)
 
-    def forward(self, x):
-        batch_size = x.size(0)
+    def forward(self, input):
+        batch_size = input.size(0)
+
+        # Bidirectional introduces a factor of 2 in some places
+        # Input shape is (BATCH_SIZE, SEQ_LENGTH, NUM_INPUT_FEATURES)
+        # Output shape is (BATCH_SIZE, SEQU_LENGTH, 2 * HIDDEN_SIZE)
+        # Hidden shape is (2 * NUM_LAYERS, BATCH_SIZE, HIDDEN_SIZE)
         hidden = torch.zeros(2 * NUM_LAYERS, batch_size, HIDDEN_SIZE)
+        out, hidden = self.rnn(input, hidden)
+        estimates = self.fc(out)
 
-        out, hidden = self.rnn(x, hidden)
-
-        out = out.contiguous().view(-1, HIDDEN_SIZE)
-        out = self.fc(out)
-
-        return out, hidden
+        return estimates, hidden
 
 
 def load_data(dir, files=None):
@@ -61,7 +64,7 @@ def load_data(dir, files=None):
         frames = []
         for f in group:
             label = regex.search(f)
-            data = pd.read_csv(os.path.join(dir, f), sep=';')
+            data = pd.read_csv(os.path.join(dir, f))
             data = data.rename(columns=lambda l: f'{l}_{label[2]}')
             frames.append(data)
         # Stack horizontally so all features for each frame are next to each other
@@ -71,14 +74,17 @@ def load_data(dir, files=None):
     groundtruths = []
     for k in sorted(keys):
         try:
-            gt = pd.read_csv(os.path.join(dir, k + '_orientation_kalman_windowed.csv'), sep=';')
-        except IOError:
-            gt = pd.read_csv(os.path.join(dir, k + '_orientation_windowed.csv'), sep=';')
+            gt = pd.read_csv(os.path.join(dir, k + '_orientation_kalman_windowed.csv'))
+        except FileNotFoundError:
+            gt = pd.read_csv(os.path.join(dir, k + '_orientation_simple_windowed.csv'))
         groundtruths.append(gt)
 
     # Stack vertically to create one big dataset
-    training_data = torch.from_numpy(pd.concat(datasets, axis=0, keys=keys))
-    groundtruth_data = torch.from_numpy(pd.concat(groundtruths, axis=0, keys=keys))
+    all_input = pd.concat(datasets, axis=0, keys=keys)
+    all_groundtruth = pd.concat(groundtruths, axis=0, keys=keys).drop(columns='window')
+
+    training_data = torch.from_numpy(all_input.values.astype(np.float32))
+    groundtruth_data = torch.from_numpy(all_groundtruth.values.astype(np.float32))
 
     return TensorDataset(training_data, groundtruth_data)
 
@@ -100,10 +106,10 @@ def train(data):
     end_condition = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    dataloader = DataLoader(data, batch_size=BATCH_SIZE, shuffle=False)
+    dataloader = DataLoader(data, batch_size=BATCH_SIZE * SEQ_LENGTH, shuffle=True, drop_last=True)
     num_samples = len(dataloader.dataset)
 
-    data.to(device)
+    #data.to(device)
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}\n-------------------------------")
         for batch_id, (samples, groundtruth) in enumerate(dataloader):
@@ -111,8 +117,8 @@ def train(data):
             optimizer.zero_grad()
 
             # Get the model's outputs
-            output, _ = model(samples)
-            loss = end_condition(output, groundtruth.view(-1).long())
+            output, _ = model(samples.view(BATCH_SIZE, SEQ_LENGTH, -1))
+            loss = end_condition(output, groundtruth.view(BATCH_SIZE, SEQ_LENGTH, -1))
             
             # Actual training step
             loss.backward()
