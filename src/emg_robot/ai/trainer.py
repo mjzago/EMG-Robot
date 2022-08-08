@@ -28,6 +28,7 @@ class RNNModel(torch.nn.Module):
         super().__init__()
 
         # See https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
+        # TODO input size must take ignored features into account
         self.rnn = nn.RNN(input_size=NUM_INPUT_FEATURES, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, bidirectional=True, batch_first=True)
         self.fc = nn.Linear(2 * HIDDEN_SIZE, OUTPUT_SIZE)
 
@@ -45,7 +46,7 @@ class RNNModel(torch.nn.Module):
         return estimates, hidden
 
 
-def load_data(dir, files=None):
+def load_data(dir, files=None, ignored_features=None):
     # Group files by common prefix
     regex = re.compile(r'(.*)_(c[AD][12])_features\.csv')
     sets = OrderedDict()
@@ -82,6 +83,12 @@ def load_data(dir, files=None):
     # Stack vertically to create one big dataset
     all_input = pd.concat(datasets, axis=0, keys=keys)
     all_groundtruth = pd.concat(groundtruths, axis=0, keys=keys).drop(columns='window')
+
+    if ignored_features:
+        ignored_features = ['f_' + f if not f.startswith('f_') else f for f in ignored_features]
+        channels = [f'emg_{i}' for i in range(EMG_CHANNELS)]
+        ignored_cols = [f'{c}_{f}' for f in ignored_features for c in channels]
+        all_input[ignored_cols] = 0.0
 
     training_data = torch.from_numpy(all_input.values.astype(np.float32))
     groundtruth_data = torch.from_numpy(all_groundtruth.values.astype(np.float32))

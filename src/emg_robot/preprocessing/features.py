@@ -95,9 +95,9 @@ def f_ie(win):
 
 
 all_features = [
-    f_iemg,
+    f_iemg,  # redundant with mav
     f_mav,
-    f_ssi,
+    f_ssi,   # redundant with rms
     f_rms,
     f_var,
     f_myop,
@@ -108,10 +108,10 @@ all_features = [
     f_dasdv,
     f_max,
     f_min,
-    f_wamp,
+    f_wamp,  # somewhat redundant with myop
     f_iasd,
     f_iatd,
     f_ieav,
-    f_ialv,
+    f_ialv,  # causes nan/inf for negative coefficients when ialv_T is not right
     f_ie,
 ]

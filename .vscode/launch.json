@@ -18,7 +18,7 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
-            "args": ["--train", "${workspaceFolder}/test/"],
+            "args": ["--train", "${workspaceFolder}/test/", "--ignore-features", "ialv"],
             "console": "integratedTerminal",
             "justMyCode": true
         }

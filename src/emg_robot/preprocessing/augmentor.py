@@ -60,7 +60,7 @@ def filter_butterworth(data, lowcut, highcut, fs, order=5):
 
     if high > 1.0:
         print(
-            f' ! Sampling frequency {fs}Hz is below butterworth highcut of {highcut}Hz')
+            f' ! Sampling frequency {fs:.3f} Hz is below butterworth highcut of {highcut:.3f} Hz')
         high = 0.99
 
     b, a = butter(order, [low, high], btype='band')
@@ -74,20 +74,25 @@ def filter_butterworth(data, lowcut, highcut, fs, order=5):
     return y
 
 
-def calc_features(df):
+def calc_features(df, ignored_features=None):
+    if ignored_features:
+        features = [f for f in all_features if f not in ignored_features]
+    else:
+        features = list(all_features)
+
     index = [get_col_label(c, f.__name__)
-             for c in df.columns[1:] for f in all_features]
+             for c in df.columns[1:] for f in features]
     ret = pd.DataFrame(np.empty([1, len(index)]), columns=index)
-    for f in all_features:
+    for f in features:
         for c in df.columns[1:]:
             ret[get_col_label(c, f.__name__)][0] = f(df[c])
     return ret
 
 
-def calc_emg_wavelet_features(coeffs, label):
+def calc_emg_wavelet_features(coeffs, label, ignored_features=None):
     print('  > Wavelet features (' + label + ')... ', end='', flush=True)
     now = time.time()
-    f = coeffs.groupby('window').apply(calc_features)
+    f = coeffs.groupby('window').apply(calc_features, args=[ignored_features])
     print(f'{time.time() - now : .3f}s')
     return f
 
@@ -102,6 +107,8 @@ def calc_emg_wavelets(df):
         df.shape[0], samples_per_window)
 
     wavelet = pywt.Wavelet('db1')
+
+    # Calculate the number of coefficients we will get on each level
     cf_len1 = int(np.floor((samples_per_window + wavelet.dec_len - 1) / 2))
     cf_len2 = int(np.ceil(cf_len1 / 2))
     # lvl 2 approximation (LP), lvl 2 details (HP), lvl 1 details (HP)
@@ -126,7 +133,7 @@ def calc_emg_wavelets(df):
     return [pd.DataFrame(arr, columns=['window'] + [c for c in cols]) for arr in (cA2, cD2, cD1)]
 
 
-def calc_emg_features(df, outdir, basename):
+def calc_emg_features(df, outdir, basename, ignored_features=None):
     emg = df[COL_EMG_CHANNELS] / EMG_RES
     emg = pd.DataFrame(filter_butterworth(
         emg, 10, 500, 1 / get_dt(df)), columns=emg.columns)
@@ -138,7 +145,7 @@ def calc_emg_features(df, outdir, basename):
     for x, label in zip(coeffs, ('cA2', 'cD2', 'cD1')):
         x.to_csv(os.path.join(outdir, basename +
                               '_' + label + '.csv'), index=False)
-        f = calc_emg_wavelet_features(x, label)
+        f = calc_emg_wavelet_features(x, label, ignored_features)
         f.to_csv(os.path.join(outdir, basename + '_' +
                               label + '_features.csv'), index=False)
 
@@ -185,11 +192,11 @@ def calc_imu_orientation(df):
     return ret
 
 
-def calc_imu_orientation_windowed(df):
+def calc_imu_orientation_windowed(df, ori):
     # Calculate the IMU mean for every EMG window so that we have one target value per window
     samples_per_window = get_window_length(df)
     num_windows, window_offset = calc_window_params(
-        df.shape[0], samples_per_window)
+        ori.shape[0], samples_per_window)
     owin = np.empty([num_windows, 2])
 
     print('  > Windowing IMU angles... ', end='', flush=True)
@@ -197,7 +204,7 @@ def calc_imu_orientation_windowed(df):
 
     for i in range(num_windows):
         owin[i] = np.mean(
-            df[i * window_offset:i * window_offset + samples_per_window])
+            ori[i * window_offset:i * window_offset + samples_per_window])
 
     print(f'{time.time() - now : .3f}s')
     owin = pd.DataFrame(owin, columns=['pitch_avg', 'roll_avg'])
@@ -206,16 +213,16 @@ def calc_imu_orientation_windowed(df):
 
 
 def calc_imu_features(df, outdir, basename):
-    o = calc_imu_orientation(df)
-    o.to_csv(os.path.join(outdir, basename + '_orientation_' +
-                          IMU_METHOD + '.csv'), index=False)
+    ori = calc_imu_orientation(df)
+    ori.to_csv(os.path.join(outdir, basename + '_orientation_' +
+                            IMU_METHOD + '.csv'), index=False)
 
-    owin = calc_imu_orientation_windowed(o)
+    owin = calc_imu_orientation_windowed(df, ori)
     owin.to_csv(os.path.join(outdir, basename + '_orientation_' +
                              IMU_METHOD + '_windowed.csv'), index=True)
 
 
-def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True):
+def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True, ignored_features=None):
     if not out_dir:
         out_dir = os.path.join(recordings_dir, 'preprocessed')
 
@@ -230,7 +237,7 @@ def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True):
 
         now = time.time()
         if do_emg:
-            calc_emg_features(df, out_dir, basename)
+            calc_emg_features(df, out_dir, basename, ignored_features)
         if do_imu:
             calc_imu_features(df, out_dir, basename)
         print(f'done ({time.time() - now : .3f}s)\n')

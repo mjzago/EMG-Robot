@@ -53,10 +53,16 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--control", dest="do_control", action='store_true',
                         help="Use a trained AI model to classify live EMG data and control a robot "
                              "(load model from data_dir/)")
+    parser.add_argument("-i", "--ignore-features", dest="ignore_features", action="extend", nargs="+",
+                        help="Do not use these features")
     parser.add_argument("data_dir",
                         help="The base folder to load from and store data in")
 
     args = parser.parse_args()
+    if args.ignore_features:
+        args.ignore_features = ['f_' + f if not f.startswith('f_') else f for f in args.ignore_features]
+    else:
+        args.ignore_features = []
 
     if args.do_recording:
         do_recording(args)
