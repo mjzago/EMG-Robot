@@ -32,19 +32,39 @@ def get_dt(df):
     return df[COL_DT].mean()
 
 
-def calc_window_params(source_len, samples_per_window):
-    window_offset = int(samples_per_window -
-                        int(samples_per_window * WINDOW_OVERLAP))
-    # Make sure that the final window can be long enough. Trailing values will be ignored
-    return int(source_len // window_offset - samples_per_window / window_offset + 1), window_offset
+def get_samples_per_window(df):
+    return int(WINDOW_LENGTH_MS // (1000 * get_dt(df)))
+
+
+def get_window_params(num_samples, samples_per_window, overlap):
+    if isinstance(overlap, float):
+        num_overlap = int(overlap * samples_per_window)
+    else:
+        num_overlap = overlap
+        
+    window_offset = int(samples_per_window - num_overlap)
+    # Make sure that the final window can be long enough. Trailing
+    # values will be ignored
+    num_windows = int(num_samples // window_offset -
+                      samples_per_window / window_offset + 1)
+    return num_windows, window_offset
+
+
+def get_window_intervals(num_samples, samples_per_window, overlap):
+    if isinstance(overlap, int):
+        r_overlap = overlap / samples_per_window
+    else:
+        r_overlap = overlap
+    num_windows, _ = get_window_params(num_samples, samples_per_window, overlap)
+    idx = np.arange(num_windows) * (1. - r_overlap)
+    idx = np.tile(idx, (2, 1)).T
+    idx[:, 1] += 1
+    idx *= samples_per_window
+    return idx.astype(np.int32)
 
 
 def get_window_indices(num_windows, target_len):
-    return np.repeat(np.arange(num_windows), target_len)
-
-
-def get_window_length(df):
-    return int(WINDOW_LENGTH_MS // (1000 * get_dt(df)))
+    return np.repeat(np.arange(num_windows), target_len).astype(np.int32)
 
 
 def normalize(df):
@@ -74,25 +94,20 @@ def filter_butterworth(data, lowcut, highcut, fs, order=5):
     return y
 
 
-def calc_features(df, ignored_features=None):
-    if ignored_features:
-        features = [f for f in all_features if f not in ignored_features]
-    else:
-        features = list(all_features)
-
+def calc_features(df):
     index = [get_col_label(c, f.__name__)
-             for c in df.columns[1:] for f in features]
+             for c in df.columns[1:] for f in all_features]
     ret = pd.DataFrame(np.empty([1, len(index)]), columns=index)
-    for f in features:
+    for f in all_features:
         for c in df.columns[1:]:
             ret[get_col_label(c, f.__name__)][0] = f(df[c])
     return ret
 
 
-def calc_emg_wavelet_features(coeffs, label, ignored_features=None):
+def calc_emg_wavelet_features(coeffs, label):
     print('  > Wavelet features (' + label + ')... ', end='', flush=True)
     now = time.time()
-    f = coeffs.groupby('window').apply(calc_features, args=[ignored_features])
+    f = coeffs.groupby('window').apply(calc_features)
     print(f'{time.time() - now : .3f}s')
     return f
 
@@ -102,9 +117,9 @@ def calc_emg_wavelets(df):
     now = time.time()
 
     cols = COL_EMG_CHANNELS
-    samples_per_window = get_window_length(df)
-    num_windows, window_offset = calc_window_params(
-        df.shape[0], samples_per_window)
+    samples_per_window = get_samples_per_window(df)
+    idx = get_window_intervals(df.shape[0], samples_per_window, WINDOW_OVERLAP)
+    num_windows = idx.shape[0]
 
     wavelet = pywt.Wavelet('db1')
 
@@ -117,35 +132,36 @@ def calc_emg_wavelets(df):
     cD1 = np.empty([cf_len1 * num_windows, len(cols) + 1])
 
     # Window index for easier grouping
-    cA2[:, 0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
-    cD2[:, 0] = get_window_indices(num_windows, cf_len2).astype(np.int16)
-    cD1[:, 0] = get_window_indices(num_windows, cf_len1).astype(np.int16)
+    cA2[:, 0] = get_window_indices(num_windows, cf_len2)
+    cD2[:, 0] = get_window_indices(num_windows, cf_len2)
+    cD1[:, 0] = get_window_indices(num_windows, cf_len1)
 
-    for i in range(num_windows):
+    for i in range(idx.shape[0]):
+        s = slice(*idx[i])
         for c_idx, c in enumerate(cols):
-            coeff = pywt.wavedec(
-                df[c][i * window_offset:i * window_offset + samples_per_window], wavelet, level=2)
+            coeff = pywt.wavedec(df[c][s], wavelet, level=2)
             cA2[i * cf_len2:(i + 1) * cf_len2, c_idx + 1] = coeff[0]
             cD2[i * cf_len2:(i + 1) * cf_len2, c_idx + 1] = coeff[1]
             cD1[i * cf_len1:(i + 1) * cf_len1, c_idx + 1] = coeff[2]
 
     print(f'{time.time() - now : .3f}s')
-    return [pd.DataFrame(arr, columns=['window'] + [c for c in cols]) for arr in (cA2, cD2, cD1)]
+    return [pd.DataFrame(arr, columns=['window'] + cols) for arr in (cA2, cD2, cD1)]
 
 
-def calc_emg_features(df, outdir, basename, ignored_features=None):
-    emg = df[COL_EMG_CHANNELS] / EMG_RES
-    emg = pd.DataFrame(filter_butterworth(
-        emg, 10, 500, 1 / get_dt(df)), columns=emg.columns)
-    emg.to_csv(os.path.join(outdir, basename +
-                            '_butterworth.csv'), index=False)
-    
+def calc_emg_features(df, outdir, basename):
+    emg = COL_EMG_CHANNELS
+    dt = get_dt(df)
+    df[emg] /= EMG_RES
+    df[emg] = filter_butterworth(df[emg], 10, 500, 1 / dt)
+    df[emg].to_csv(os.path.join(outdir, basename +
+                                '_butterworth.csv'), index=False)
+
     coeffs = calc_emg_wavelets(df)
 
     for x, label in zip(coeffs, ('cA2', 'cD2', 'cD1')):
         x.to_csv(os.path.join(outdir, basename +
                               '_' + label + '.csv'), index=False)
-        f = calc_emg_wavelet_features(x, label, ignored_features)
+        f = calc_emg_wavelet_features(x, label)
         f.to_csv(os.path.join(outdir, basename + '_' +
                               label + '_features.csv'), index=False)
 
@@ -194,9 +210,9 @@ def calc_imu_orientation(df):
 
 def calc_imu_orientation_windowed(df, ori):
     # Calculate the IMU mean for every EMG window so that we have one target value per window
-    samples_per_window = get_window_length(df)
-    num_windows, window_offset = calc_window_params(
-        ori.shape[0], samples_per_window)
+    samples_per_window = get_samples_per_window(df)
+    num_windows, window_offset = get_window_params(
+        ori.shape[0], samples_per_window, WINDOW_OVERLAP)
     owin = np.empty([num_windows, 2])
 
     print('  > Windowing IMU angles... ', end='', flush=True)
@@ -222,7 +238,7 @@ def calc_imu_features(df, outdir, basename):
                              IMU_METHOD + '_windowed.csv'), index=True)
 
 
-def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True, ignored_features=None):
+def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True):
     if not out_dir:
         out_dir = os.path.join(recordings_dir, 'preprocessed')
 
@@ -237,7 +253,7 @@ def process_recordings(recordings_dir, out_dir=None, do_emg=True, do_imu=True, i
 
         now = time.time()
         if do_emg:
-            calc_emg_features(df, out_dir, basename, ignored_features)
+            calc_emg_features(df, out_dir, basename)
         if do_imu:
             calc_imu_features(df, out_dir, basename)
         print(f'done ({time.time() - now : .3f}s)\n')

@@ -4,7 +4,7 @@ import numpy as np
 # TODO T-values
 myop_T = 0.5
 wamp_T = 0.5
-ialv_T = 0    # to avoid log of negative values
+ialv_T = 1.0   # to avoid log of negative values
 
 
 def diff(win):
@@ -73,12 +73,12 @@ def f_wamp(win):
 
 def f_iasd(win):
     '''integrated absolute of second derivative'''
-    x1 = diff(win)
+    x1 = diff(diff(win))
     return np.abs(x1).sum()
 
 def f_iatd(win):
     '''integrated absolute of third derivative'''
-    x2 = diff(diff(win))
+    x2 = diff(diff(diff(win)))
     return np.abs(x2).sum()
 
 def f_ieav(win):
@@ -95,23 +95,23 @@ def f_ie(win):
 
 
 all_features = [
-    f_iemg,  # redundant with mav
+#    f_iemg,  # redundant with mav
     f_mav,
-    f_ssi,   # redundant with rms
+#    f_ssi,   # redundant with rms
     f_rms,
     f_var,
     f_myop,
-    f_wl,
+#    f_wl,    # redundant with damv
     f_damv,
-    f_m2,
-    f_dvarv,
-    f_dasdv,
+#    f_m2,    # somewhat redundant with damv
+#    f_dvarv, # redundant with m2
+    f_dasdv,  # somewhat redundant with dvarv (keep for now)
     f_max,
     f_min,
-    f_wamp,  # somewhat redundant with myop
+    f_wamp,   # like myop, but on differences
     f_iasd,
     f_iatd,
     f_ieav,
-    f_ialv,  # causes nan/inf for negative coefficients when ialv_T is not right
-    f_ie,
+#    f_ialv,  # causes nan/inf for negative coefficients when ialv_T is not right
+    f_ie,     # somewhat redundant with ieav (keep for now)
 ]
