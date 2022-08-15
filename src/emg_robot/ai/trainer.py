@@ -1,6 +1,7 @@
 import os
 import re
 import time
+from datetime import datetime
 from collections import OrderedDict
 
 import numpy as np
@@ -14,7 +15,7 @@ from ..preprocessing.features import all_features
 BATCH_SIZE = 4  # Number of data batches when training (should be a power of 2)
 SEQ_LENGTH = 5  # The number of EMG windows to consider (i.e. how far back the RNN will remember)
 NUM_LAYERS = 1  # How many stacks the RNN should have
-HIDDEN_SIZE = 128  # TODO can probably be smaller (should be a power of ?2)
+HIDDEN_SIZE = 256  # TODO can probably be smaller (should be a power of ?2)
 OUTPUT_SIZE = 2  # pitch & roll of the forearm
 
 NUM_FEATURES = len(all_features)
@@ -31,6 +32,11 @@ class RNNModel(torch.nn.Module):
         # TODO input size must take ignored features into account
         self.rnn = nn.RNN(input_size=NUM_INPUT_FEATURES, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, bidirectional=True, batch_first=True)
         self.fc = nn.Linear(2 * HIDDEN_SIZE, OUTPUT_SIZE)
+        self.device = 'cpu'
+
+    def to(self, device):
+        self.device = device
+        super().to(device)
 
     def forward(self, input):
         batch_size = input.size(0)
@@ -39,7 +45,7 @@ class RNNModel(torch.nn.Module):
         # Input shape is (BATCH_SIZE, SEQ_LENGTH, NUM_INPUT_FEATURES)
         # Output shape is (BATCH_SIZE, SEQU_LENGTH, 2 * HIDDEN_SIZE)
         # Hidden shape is (2 * NUM_LAYERS, BATCH_SIZE, HIDDEN_SIZE)
-        hidden = torch.zeros(2 * NUM_LAYERS, batch_size, HIDDEN_SIZE)
+        hidden = torch.zeros(2 * NUM_LAYERS, batch_size, HIDDEN_SIZE).to(self.device)
         out, hidden = self.rnn(input, hidden)
         estimates = self.fc(out)
 
@@ -104,13 +110,14 @@ def train(data):
         device = torch.device('cpu')
         print('Training RNN on CPU')
 
+    # For reference: https://machinelearningmastery.com/multivariate-time-series-forecasting-lstms-keras/
     model = RNNModel()
     model.to(device)
 
     epochs = 100
-    learning_rate = 0.01
+    learning_rate = 0.05
 
-    end_condition = nn.CrossEntropyLoss()
+    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     dataloader = DataLoader(data, batch_size=BATCH_SIZE * SEQ_LENGTH, shuffle=True, drop_last=True)
@@ -123,9 +130,13 @@ def train(data):
             # Clear existing gradients from previous epoch
             optimizer.zero_grad()
 
+            # Should be on the same device as the model
+            samples = samples.to(device)
+            groundtruth = groundtruth.to(device)
+
             # Get the model's outputs
             output, _ = model(samples.view(BATCH_SIZE, SEQ_LENGTH, -1))
-            loss = end_condition(output, groundtruth.view(BATCH_SIZE, SEQ_LENGTH, -1))
+            loss = loss_function(output, groundtruth.view(BATCH_SIZE, SEQ_LENGTH, -1))
             
             # Actual training step
             loss.backward()
@@ -144,7 +155,8 @@ def save_model(model, dir):
     # model = RNNModel(...)
     # model.load_state_dict(torch.load(PATH))
     # model.eval()
-    model_name = f'model_{time.now()}.torch'
+    t = datetime.now().strftime('%Y%m%d_%H%M%S')
+    model_name = f'model_{t}.torch'
     out_file = os.path.join(dir, model_name)
     torch.save(model.state_dict(), out_file)
     return out_file

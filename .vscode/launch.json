@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
-            "args": ["--preprocess", "${workspaceFolder}/test/"],
+            "args": ["--preprocess", "${workspaceFolder}/datasets/${input:dataset}"],
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -18,9 +18,21 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
-            "args": ["--train", "${workspaceFolder}/test/", "--ignore-features", "ialv"],
+            "args": ["--train", "${workspaceFolder}/datasets/${input:dataset}"],
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+    ],
+    "inputs": [
+        {
+          "id": "dataset",
+          "type": "pickString",
+          "description": "Which dataset to use?",
+          "options": [
+            "test",
+            "full"
+          ],
+          "default": "test"
         }
     ]
 }
