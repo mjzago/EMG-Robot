@@ -8,12 +8,13 @@ from imusensor.filters import kalman
 from scipy.signal import butter, lfilter
 
 from .features import all_features
+from .utils import *
 
 
 EMG_RES = 2**12  # 12bit ADC
 # TODO adjust
-WINDOW_LENGTH_MS = 100  # How long each window should roughly be in ms
-WINDOW_OVERLAP = 0.5
+WINDOW_LENGTH = 0.1  # How long each window should roughly be in seconds
+WINDOW_OVERLAP = 0.5  # ratio of how much windows should overlap
 IMU_METHOD = 'kalman'  # simple | kalman
 
 COL_DT = 'dt'
@@ -30,41 +31,6 @@ def get_dt(df):
     if isinstance(COL_DT, float):
         COL_DT
     return df[COL_DT].mean()
-
-
-def get_samples_per_window(df):
-    return int(WINDOW_LENGTH_MS // (1000 * get_dt(df)))
-
-
-def get_window_params(num_samples, samples_per_window, overlap):
-    if isinstance(overlap, float):
-        num_overlap = int(overlap * samples_per_window)
-    else:
-        num_overlap = overlap
-        
-    window_offset = int(samples_per_window - num_overlap)
-    # Make sure that the final window can be long enough. Trailing
-    # values will be ignored
-    num_windows = int(num_samples // window_offset -
-                      samples_per_window / window_offset + 1)
-    return num_windows, window_offset
-
-
-def get_window_intervals(num_samples, samples_per_window, overlap):
-    if isinstance(overlap, int):
-        r_overlap = overlap / samples_per_window
-    else:
-        r_overlap = overlap
-    num_windows, _ = get_window_params(num_samples, samples_per_window, overlap)
-    idx = np.arange(num_windows) * (1. - r_overlap)
-    idx = np.tile(idx, (2, 1)).T
-    idx[:, 1] += 1
-    idx *= samples_per_window
-    return idx.astype(np.int32)
-
-
-def get_window_indices(num_windows, target_len):
-    return np.repeat(np.arange(num_windows), target_len).astype(np.int32)
 
 
 def normalize(df):
@@ -88,7 +54,7 @@ def filter_butterworth(data, lowcut, highcut, fs, order=5):
     print(
         f' >  Butterworth filter ({lowcut}, {highcut})... ', end='', flush=True)
     now = time.time()
-    y = lfilter(b, a, data, axis=1)
+    y = lfilter(b, a, data, axis=0)
     print(f'{time.time() - now : .3f}s')
 
     return y
@@ -104,8 +70,7 @@ def calc_features(df):
     return ret
 
 
-def calc_emg_wavelet_features(coeffs, label):
-    print('  > Wavelet features (' + label + ')... ', end='', flush=True)
+def calc_emg_wavelet_features(coeffs):
     now = time.time()
     f = coeffs.groupby('window').apply(calc_features)
     print(f'{time.time() - now : .3f}s')
@@ -117,7 +82,7 @@ def calc_emg_wavelets(df):
     now = time.time()
 
     cols = COL_EMG_CHANNELS
-    samples_per_window = get_samples_per_window(df)
+    samples_per_window = get_samples_per_window(WINDOW_LENGTH, get_dt(df))
     idx = get_window_intervals(df.shape[0], samples_per_window, WINDOW_OVERLAP)
     num_windows = idx.shape[0]
 
@@ -161,7 +126,8 @@ def calc_emg_features(df, outdir, basename):
     for x, label in zip(coeffs, ('cA2', 'cD2', 'cD1')):
         x.to_csv(os.path.join(outdir, basename +
                               '_' + label + '.csv'), index=False)
-        f = calc_emg_wavelet_features(x, label)
+        print('  > Wavelet features (' + label + ')... ', end='', flush=True)
+        f = calc_emg_wavelet_features(x)
         f.to_csv(os.path.join(outdir, basename + '_' +
                               label + '_features.csv'), index=False)
 
@@ -210,7 +176,7 @@ def calc_imu_orientation(df):
 
 def calc_imu_orientation_windowed(df, ori):
     # Calculate the IMU mean for every EMG window so that we have one target value per window
-    samples_per_window = get_samples_per_window(df)
+    samples_per_window = get_samples_per_window(WINDOW_LENGTH, get_dt(df))
     num_windows, window_offset = get_window_params(
         ori.shape[0], samples_per_window, WINDOW_OVERLAP)
     owin = np.empty([num_windows, 2])

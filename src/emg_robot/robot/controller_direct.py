@@ -1,141 +1,185 @@
-from cmath import tau
 import sys
 import time
 import numpy as np
-from torch import addr
-import smbus 
+import pywt
+
+import smbus
 from frankx import Robot, JointMotion
-from utils import CircularBuffer
-import emg_robot.prepare.features as features
 
-
-emg_buffer_size = 50
-max_change_rad = 0.1
+from emg_robot.preprocessing import filter_butterworth, all_features
 
 
 A0 = 0x48
 A1 = 0x49
-A2 = 0x4A 
+A2 = 0x4A
 A3 = 0x4B
-A4 = 0x4C 
-A5 = 0x4D 
+A4 = 0x4C
+A5 = 0x4D
 A6 = 0x4E
-A7 = 0x4F 
-
-# get the address from programm arguments 
-robot_ip = sys.argv[1]
-addresses = [locals()[arg] for arg in sys.argv[2:]]
-
-buffer = CircularBuffer(emg_buffer_size, [len(addresses)])
-bus = smbus.SMBus(1)
-robot = Robot(robot_ip)
-robot.set_dynamic_rel(0.1)
+A7 = 0x4F
 
 
-def read_emg():
-    row = buffer.row()
-    for idx,a in enumerate(addresses):
-        data = bus.read_i2c_block_data(a, 0, 2)
-        row[idx] = (data[0] << 8) | data[1]
-    buffer.step()
+# TODO adjust as required
+I2C_ADDRESSES = [A0, A1, A2, A4, A6]   # order matters (somewhat)
+WINDOW_LENGTH = 0.1  # in seconds
+WINDOW_OVERLAP = 0.5  # ratio
+BUFFER_SIZE = 2000  # should comfortably fit number of samples per window
+ROBOT_IP = "192.168.2.12"
+MAX_JOINT_CHANGE_RAD = 0.1
 
 
-def calc_emg_features(df):
-    for f in features.all_features:
-        df[f.__name__] = df.apply(f, axis=0)
-    return df
+class EMGBuffer():
+    def __init__(self, size, channels) -> None:
+        self.buffer = np.zeros([BUFFER_SIZE, len(I2C_ADDRESSES)])
+        self.pos = 0
+        self.dt = 0.
+
+    def append(self, values, dt):
+        assert(len(values) == self.buffer.shape[1])
+        # Note that this won't keep a reference to values
+        self.buffer[self.pos] = values
+        self.pos += 1
+        self.dt += dt
+
+    def values(self):
+        return self.buffer[:self.pos]
+
+    def dt_avg(self):
+        return self.dt / self.pos
+
+    def sampling_rate(self):
+        return self.pos / self.dt
+
+    def is_window_full(self, window_length):
+        '''
+        Check if there are enough values in this buffer to fill a window
+        of the given length in seconds.
+        '''
+        return self.pos >= window_length // self.dt_avg
+
+    def clear(self, keep_ratio=0.0):
+        b = self.buffer
+        num_keep = min(b.shape[0], np.ceil(self.pos * keep_ratio))
+        b[:num_keep] = b[self.pos - num_keep:]
+        self.pos = num_keep
+        # keep dt
+
+    def __sizeof__(self) -> int:
+        return self.pos
 
 
-def is_emg_active(df):
-    pass
+class EMGReader():
+    def __init__(self, buffer_size, channels) -> None:
+        self.bus = smbus.SMBus(1)
+        self.channels = channels
+        self.buffer = EMGBuffer(buffer_size, len(channels))
+        self.buffer_row = np.zeros([len(channels)])
+        self.last_read = time.time()
+
+    def read(self):
+        r = self.buffer_row
+        bus = self.bus
+
+        for idx, a in enumerate(self.channels):
+            data = bus.read_i2c_block_data(a, 0, 2)
+            r[idx] = (data[0] << 8) | data[1]
+
+        now = time.time()
+        self.buffer.append(r, self.last_read - now)
+        self.last_read = now
+
+    def sampling_rate(self):
+        return self.buffer.sampling_rate()
+
+    def clear(self, keep_ratio=0.0):
+        self.buffer.clear(keep_ratio)
+
+    def has_full_window(self, window_length):
+        return self.buffer.is_window_full(window_length)
+
+    def get_samples(self):
+        return self.buffer.values()
 
 
-def update_joint(curr, new):
-    if curr - new > max_change_rad:
-        return curr - max_change_rad
-    if new - curr > max_change_rad:
-        return curr + max_change_rad
-    return new 
+class RobotController():
+    def __init__(self, ip, dynamic_limit_rel=0.1, joint_change_limit_rad=0.05) -> None:
+        self.ip = ip
+        self.robot = Robot(ip)
+        # Percentage of robot's maximum velocity, acceleration and jerk
+        self.robot.set_dynamic_rel(dynamic_limit_rel)
+        self.joint_change_limit_rad = joint_change_limit_rad
+
+    def limit_joint_motion(self, curr, new):
+        if new < curr - self.joint_change_limit_rad:
+            return curr - self.joint_change_limit_rad
+        if new > curr + self.joint_change_limit_rad:
+            return curr + self.joint_change_limit_rad
+        return new
+
+    def move(self, pitch, roll):
+        state = self.robot.get_state()
+        if any(dq > 0.1 for dq in state.dq):
+            print('Warning: robot is currently moving!')
+
+        j = state.q
+        j[3] = self.limit_joint_motion(j[3], pitch)  # elbow
+        j[4] = self.limit_joint_motion(j[4], roll)  # forearm
+
+        try:
+            self.robot.recover_from_errors()
+            self.robot.move(JointMotion(j))
+        except Exception as e:
+            print(str(e))
 
 
-def robot_move(phi, tau):
-    state = robot.get_state()
-    if any(dq > 0.1 for dq in state.dq):
-        print('Warning: robot is currently moving!')
-
-    j = state.q
-    j[3] = update_joint(j[3], phi)  # elbow
-    j[4] = update_joint(j[4], tau)  # forearm
-
-    try:
-        robot.recover_from_errors()
-        robot.move(JointMotion(j))
-    except Exception as e:
-        print(str(e))
+def calc_features(vals):
+    # Windowing is only necessary for preprocessing
+    nf = len(all_features)
+    ret = np.zeros([nf, vals.shape[1]])
+    for idx, f in enumerate(all_features):
+        ret[idx, :] = f(vals)
+    return ret
 
 
-while True:
+def main(robot_ip, i2c_addresses):
+    emg = EMGReader(BUFFER_SIZE, i2c_addresses)
+    robot = RobotController(robot_ip)
+    wavelet = pywt.Wavelet('db1')
 
+    while(True):
+        emg.read()
+        if not emg.has_full_window():
+            continue
 
+        values = emg.get_samples()
 
-def emg_filter(data, emg_config):
-    # TODO apply band filter, noise reduction, whitening, normalization, smoothing (moving average)...
-    pass
+        # Preprocessing
+        sampling_rate = emg.sampling_rate()
+        if sampling_rate > 500:
+            values = filter_butterworth(values, 0, 500, sampling_rate)
 
+        cA2, cD2, cD1 = pywt.wavedec(values, wavelet, level=2, axis=0)
+        fA2 = calc_features(cA2)
+        fD2 = calc_features(cD2)
+        fD1 = calc_features(cD1)
 
-def emg_classify(data, emg_config):
-    joint_estimates = {
-        'joints': None,            # array of joint estimates for EITHER the actual human's arm OR the resulting robot's arm
-        'timestamp': time.time(),  # needed to calculate joint velocities
-    }
+        ### Transform features into arm angles
+        # Feature vector should be of the shape [num_features * num_channels * 3]
+        # NOTE: order must be the same as when training the model!
+        features = np.stack([fA2, fD1, fD2], axis=1)
+        pitch, roll = apply_model(features)
 
-    # TODO get joint estimates from classifier (e.g. neural network)
-    return joint_estimates
+        ### Move robot
+        robot.move(pitch, roll)
 
-def limit_joint_velocities(prev_joint_estimates, joint_estimates):
-    # TODO avoid sudden accelerations due to noise or wrong classifications
-    pass
-
-def send_to_robot(joint_estimates, robot_config):
-    # TODO send new joint space pose to robot (ROS)
-    pass
-
+        # Keep part of this window and continue collecting
+        emg.clear(WINDOW_OVERLAP)
 
 
 if __name__ == '__main__':
-    # Configuration and metadata of the EMG source
-    emg_config = {
-        'source': 'dataset',
-        'derivatives': 16,
-        'samples_per_second': 100,
-        'moving_average_window': 50,
-    }
-    # Everything we need to connect to the robot and control it
-    robot_config = {
-        'ip': '192.168.2.1',
-        'port': 3000,
-    }
-
-    init_emg(emg_config)
-    init_robot(robot_config)
-
-    data = np.zeros((emg_config['moving_average_window'], emg_config['derivatives']))
-    prev_joint_estimates = None
-
-    while True:
-        try:
-            # MOHAMMED, dein Part :)
-            read_data(data, emg_config)
-            emg_filter(data, emg_config)
-            
-            # Tendenziell mein Part!
-            joint_estimates = emg_classify(data, emg_config)
-            limit_joint_velocities(prev_joint_estimates, joint_estimates)
-            send_to_robot(joint_estimates, robot_config)
-        except KeyboardInterrupt:
-            print('Terminated by user')
-            break
-        except Exception as e:
-            sys.exit(e)
-
-    sys.exit(0)
+    try:
+        main(ROBOT_IP, I2C_ADDRESSES)
+    except KeyboardInterrupt:
+        print('Terminated by user')
+    except Exception as e:
+        sys.exit(e)

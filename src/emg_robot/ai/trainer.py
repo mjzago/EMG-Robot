@@ -54,6 +54,8 @@ class RNNModel(torch.nn.Module):
 
 def load_data(dir, files=None, ignored_features=None):
     # Group files by common prefix
+    # match[1]: original data filename
+    # match[2]: wavelet coefficient type (cA2, cD1, cD2)
     regex = re.compile(r'(.*)_(c[AD][12])_features\.csv')
     sets = OrderedDict()
     keys = set()
@@ -67,12 +69,13 @@ def load_data(dir, files=None, ignored_features=None):
     # Load files and concatenate those that belong together
     datasets = []
     for group in sets.values():
+        # IMPORTANT: coefficients will be in the order cA2, cD1, cD2!
         group = sorted(group)
         frames = []
         for f in group:
-            label = regex.search(f)
+            match = regex.search(f)
             data = pd.read_csv(os.path.join(dir, f))
-            data = data.rename(columns=lambda l: f'{l}_{label[2]}')
+            data = data.rename(columns=lambda l: f'{l}_{match[2]}')
             frames.append(data)
         # Stack horizontally so all features for each frame are next to each other
         datasets.append(pd.concat(frames, axis=1))
@@ -115,7 +118,7 @@ def train(data):
     model.to(device)
 
     epochs = 100
-    learning_rate = 0.05
+    learning_rate = 0.001
 
     loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
