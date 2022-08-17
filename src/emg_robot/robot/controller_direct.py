@@ -29,26 +29,36 @@ MAX_JOINT_CHANGE_RAD = 0.1
 
 
 class EMGBuffer():
-    def __init__(self, size, channels) -> None:
-        self.buffer = np.zeros([BUFFER_SIZE, len(I2C_ADDRESSES)])
+    def __init__(self, shape) -> None:
+        self.buffer = np.zeros(shape)
         self.pos = 0
-        self.dt = 0.
+        self.dt_avg = 0.
+        self.m2 = 0.
+        self.n = 0
 
     def append(self, values, dt):
-        assert(len(values) == self.buffer.shape[1])
+        assert(values.shape == self.buffer.shape[1:])
         # Note that this won't keep a reference to values
         self.buffer[self.pos] = values
         self.pos += 1
-        self.dt += dt
+        self.n += 1
+
+        # See https://stackoverflow.com/a/3907612/2061551
+        delta = dt - self.dt_avg
+        self.dt_avg += delta / self.n
+        self.m2 += np.sqrt(delta * (dt - self.dt_avg))  # use the updated value
 
     def values(self):
         return self.buffer[:self.pos]
 
     def dt_avg(self):
-        return self.dt / self.pos
+        return self.dt_avg
+
+    def dt_var(self):
+        return self.m2 / self.n
 
     def sampling_rate(self):
-        return self.pos / self.dt
+        return self.pos / self.dt_avg
 
     def is_window_full(self, window_length):
         '''
@@ -62,7 +72,13 @@ class EMGBuffer():
         num_keep = min(b.shape[0], np.ceil(self.pos * keep_ratio))
         b[:num_keep] = b[self.pos - num_keep:]
         self.pos = num_keep
-        # keep dt
+        # keep dt, m2 and n
+
+    def reset(self):
+        self.clear()
+        self.dt = 0.
+        self.m2 = 0.
+        self.n = 0
 
     def __sizeof__(self) -> int:
         return self.pos
@@ -70,9 +86,9 @@ class EMGBuffer():
 
 class EMGReader():
     def __init__(self, buffer_size, channels) -> None:
-        self.bus = smbus.SMBus(1)
         self.channels = channels
-        self.buffer = EMGBuffer(buffer_size, len(channels))
+        self.bus = smbus.SMBus(1)
+        self.buffer = EMGBuffer([buffer_size, len(channels)])
         self.buffer_row = np.zeros([len(channels)])
         self.last_read = time.time()
 
