@@ -1,1 +1,1 @@
-from .trainer import load_data, train, save_model
+from .trainer import load_data, train, save_model, load_model

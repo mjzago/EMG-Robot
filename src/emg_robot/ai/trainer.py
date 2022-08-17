@@ -14,8 +14,8 @@ from ..preprocessing.features import all_features
 
 BATCH_SIZE = 4  # Number of data batches when training (should be a power of 2)
 SEQ_LENGTH = 5  # The number of EMG windows to consider (i.e. how far back the RNN will remember)
-NUM_LAYERS = 1  # How many stacks the RNN should have
-HIDDEN_SIZE = 256  # TODO can probably be smaller (should be a power of ?2)
+NUM_LAYERS = 1  # How many stacks the model should have
+HIDDEN_SIZE = 128  # TODO tune (should be a power of 2?)
 OUTPUT_SIZE = 2  # pitch & roll of the forearm
 
 NUM_FEATURES = len(all_features)
@@ -24,13 +24,13 @@ WT_DECOMPOSITIONS = 3  # level 2 wavelet
 NUM_INPUT_FEATURES = EMG_CHANNELS * NUM_FEATURES * WT_DECOMPOSITIONS
 
 
-class RNNModel(torch.nn.Module): 
+class AIModel(torch.nn.Module): 
     def __init__(self) -> None:
         super().__init__()
 
         # See https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
         # TODO input size must take ignored features into account
-        self.rnn = nn.RNN(input_size=NUM_INPUT_FEATURES, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, bidirectional=True, batch_first=True)
+        self.model = nn.LSTM(input_size=NUM_INPUT_FEATURES, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, bidirectional=True, batch_first=True)
         self.fc = nn.Linear(2 * HIDDEN_SIZE, OUTPUT_SIZE)
         self.device = 'cpu'
 
@@ -39,17 +39,17 @@ class RNNModel(torch.nn.Module):
         super().to(device)
 
     def forward(self, input):
-        batch_size = input.size(0)
+        #batch_size = input.size(0)
 
         # Bidirectional introduces a factor of 2 in some places
         # Input shape is (BATCH_SIZE, SEQ_LENGTH, NUM_INPUT_FEATURES)
         # Output shape is (BATCH_SIZE, SEQU_LENGTH, 2 * HIDDEN_SIZE)
         # Hidden shape is (2 * NUM_LAYERS, BATCH_SIZE, HIDDEN_SIZE)
-        hidden = torch.zeros(2 * NUM_LAYERS, batch_size, HIDDEN_SIZE).to(self.device)
-        out, hidden = self.rnn(input, hidden)
+        #hidden = torch.zeros(2 * NUM_LAYERS, batch_size, HIDDEN_SIZE).to(self.device)
+        out, state = self.model(input)
         estimates = self.fc(out)
 
-        return estimates, hidden
+        return estimates, state
 
 
 def load_data(dir, files=None, ignored_features=None):
@@ -114,7 +114,7 @@ def train(data):
         print('Training RNN on CPU')
 
     # For reference: https://machinelearningmastery.com/multivariate-time-series-forecasting-lstms-keras/
-    model = RNNModel()
+    model = AIModel()
     model.to(device)
 
     epochs = 100
@@ -153,13 +153,15 @@ def train(data):
 
 
 def save_model(model, dir):
-    # Load like this:
-    # 
-    # model = RNNModel(...)
-    # model.load_state_dict(torch.load(PATH))
-    # model.eval()
     t = datetime.now().strftime('%Y%m%d_%H%M%S')
     model_name = f'model_{t}.torch'
     out_file = os.path.join(dir, model_name)
     torch.save(model.state_dict(), out_file)
     return out_file
+
+
+def load_model(path):
+    model = AIModel()
+    model.load_state_dict(torch.load(path))
+    model.eval()
+    return model
