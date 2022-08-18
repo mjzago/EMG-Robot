@@ -33,6 +33,3 @@ class RobotController():
             self.robot.move(JointMotion(j))
         except Exception as e:
             print(str(e))
-
-    def move_rel(self, dpitch, droll):
-
