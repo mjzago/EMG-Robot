@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from ..preprocessing.features import all_features
+from ..preprocess.features import all_features
 
 BATCH_SIZE = 4  # Number of data batches when training (should be a power of 2)
 SEQ_LENGTH = 5  # The number of EMG windows to consider (i.e. how far back the RNN will remember)

@@ -3,8 +3,8 @@ import numpy as np
 import pywt
 
 from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP
-from emg_robot.preprocessing import filter_butterworth, all_features
-from emg_robot.ai import load_model
+from emg_robot.preprocess import filter_butterworth, all_features
+from emg_robot.learn import load_model
 from .emg_reader import EMGReader
 from .robot import RobotInterface
 

@@ -9,14 +9,14 @@ def do_recording(args):
 
 
 def do_preprocessing(args):
-    from emg_robot.preprocessing import process_recordings
+    from emg_robot.preprocess import process_recordings
 
     process_recordings(os.path.join(args.data_dir, 'recordings/'),
                        os.path.join(args.data_dir, 'preprocessed/'))
 
 
 def do_training(args):
-    from emg_robot.ai import load_data, save_model, train
+    from emg_robot.learn import load_data, save_model, train
 
     data = load_data(os.path.join(args.data_dir, 'preprocessed/'))
     model = train(data)
@@ -31,8 +31,8 @@ def do_simulate(args):
 
 
 def do_control_direct(args):
-    from emg_robot.robot import start_gui
-    from emg_robot.robot.controller_direct_fake import DirectControllerFake
+    from emg_robot.control import start_gui
+    from emg_robot.control.controller_direct_fake import DirectControllerFake
     from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP, EMG_CHANNEL_NAMES
     
     ctrl = DirectControllerFake(I2C_ADDRESSES, ROBOT_IP)
