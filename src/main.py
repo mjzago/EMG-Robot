@@ -30,10 +30,13 @@ def do_simulate(args):
     raise NotImplementedError()
 
 
-def do_control(args):
-    # from emg_robot.robot import
-    # TODO
-    raise NotImplementedError()
+def do_control_direct(args):
+    from emg_robot.robot import start_gui
+    from emg_robot.robot.controller_direct_fake import DirectControllerFake
+    from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP, EMG_CHANNEL_NAMES
+    
+    ctrl = DirectControllerFake(I2C_ADDRESSES, ROBOT_IP)
+    start_gui(ctrl, EMG_CHANNEL_NAMES)
 
 
 if __name__ == '__main__':
@@ -77,4 +80,4 @@ if __name__ == '__main__':
         do_simulate(args)
 
     if args.do_control:
-        do_control(args)
+        do_control_direct(args)

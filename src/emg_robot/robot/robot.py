@@ -1,10 +1,10 @@
-from frankx import Robot, JointMotion
-
-
-class RobotController():
+class RobotInterface():
     def __init__(self, ip, dynamic_limit_rel=0.1, joint_change_limit_rad=0.05) -> None:
+        global frankx
+        import frankx
+
         self.ip = ip
-        self.robot = Robot(ip)
+        self.robot = frankx.Robot(ip)
         # Percentage of robot's maximum velocity, acceleration and jerk
         self.robot.set_dynamic_rel(dynamic_limit_rel)
         self.joint_change_limit_rad = joint_change_limit_rad
@@ -30,6 +30,6 @@ class RobotController():
 
         try:
             self.robot.recover_from_errors()
-            self.robot.move(JointMotion(j))
+            self.robot.move(frankx.JointMotion(j))
         except Exception as e:
             print(str(e))

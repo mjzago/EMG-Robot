@@ -1,6 +1,5 @@
 import time
 import numpy as np
-import smbus
 
 
 class EMGBuffer():
@@ -35,12 +34,12 @@ class EMGBuffer():
     def sampling_rate(self):
         return self.pos / self.dt_avg
 
-    def is_window_full(self, window_length):
+    def is_window_full(self, window_length_s):
         '''
         Check if there are enough values in this buffer to fill a window
         of the given length in seconds.
         '''
-        return self.pos >= window_length // self.dt_avg
+        return self.pos >= window_length_s // self.dt_avg
 
     def clear(self, keep_ratio=0.0):
         b = self.buffer
@@ -61,6 +60,8 @@ class EMGBuffer():
 
 class EMGReader():
     def __init__(self, buffer_size, channels) -> None:
+        import smbus
+        
         self.channels = channels
         self.bus = smbus.SMBus(1)
         self.buffer = EMGBuffer([buffer_size, len(channels)])
@@ -85,8 +86,8 @@ class EMGReader():
     def clear(self, keep_ratio=0.0):
         self.buffer.clear(keep_ratio)
 
-    def has_full_window(self, window_length):
-        return self.buffer.is_window_full(window_length)
+    def has_full_window(self, window_length_s):
+        return self.buffer.is_window_full(window_length_s)
 
     def get_samples(self):
         return self.buffer.values()

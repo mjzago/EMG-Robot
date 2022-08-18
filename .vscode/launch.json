@@ -22,6 +22,15 @@
             "console": "integratedTerminal",
             "justMyCode": true
         },
+        {
+            "name": "direct_fake",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "args": ["--control", "${workspaceFolder}/datasets/test"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
     ],
     "inputs": [
         {
