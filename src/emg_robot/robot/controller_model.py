@@ -1,91 +1,84 @@
 import sys
-import time
 import numpy as np
+import pywt
+
+from emg_robot.preprocessing import filter_butterworth, all_features
+from emg_robot.ai import load_model
+from .emg_reader import EMGReader
+from .robot import RobotController
 
 
-def init_emg(emg_config):
-    # TODO load and initialize neural network or whatever classifier we'll be using
-    if (emg_config.source == 'emg'):
-        # TODO initialize EMG sensors. This is probably also where we would run a calibration or even 
-        #      additional training for our classifier
-        pass
-    elif (emg_config.source == 'dataset'):
-        # TODO load dataset
-        pass
-
-def init_robot(robot_config):
-    # TODO establish connection to robot (ROS)
-    pass
+A0 = 0x48
+A1 = 0x49
+A2 = 0x4A
+A3 = 0x4B
+A4 = 0x4C
+A5 = 0x4D
+A6 = 0x4E
+A7 = 0x4F
 
 
-def read_data(data, emg_config):
-    # TODO read next sample(s) into data and remove old ones
-    if (emg_config.source == 'emg'):
-        # TODO return samples collected since last call (might have to collect in a separate thread?)
-        pass
-    elif (emg_config.source == 'dataset'):
-        # TODO 
-        pass
+# TODO adjust as required
+I2C_ADDRESSES = [A4, A5, A2, A6, A0]   # order matters (somewhat)
+WINDOW_LENGTH = 0.1  # in seconds
+WINDOW_OVERLAP = 0.5  # ratio
+BUFFER_SIZE = 2000  # should comfortably fit number of samples per window
+AI_MODEL_PATH = "path/to/model"  # TODO
+ROBOT_IP = "192.168.2.12"
+MAX_JOINT_CHANGE_RAD = 0.1
+ROBOT_SPEED_F = 0.1
 
 
-def emg_filter(data, emg_config):
-    # TODO apply band filter, noise reduction, whitening, normalization, smoothing (moving average)...
-    pass
+def calc_features(vals):
+    # Windowing is only necessary for preprocessing
+    nf = len(all_features)
+    ret = np.zeros([nf, vals.shape[1]])
+    for idx, f in enumerate(all_features):
+        ret[idx, :] = f(vals)
+    return ret
 
 
-def emg_classify(data, emg_config):
-    joint_estimates = {
-        'joints': None,            # array of joint estimates for EITHER the actual human's arm OR the resulting robot's arm
-        'timestamp': time.time(),  # needed to calculate joint velocities
-    }
+def main(i2c_addresses, ai_model_path, robot_ip):
+    emg = EMGReader(BUFFER_SIZE, i2c_addresses)
+    model = load_model(ai_model_path)
+    robot = RobotController(robot_ip, ROBOT_SPEED_F, MAX_JOINT_CHANGE_RAD)
+    wavelet = pywt.Wavelet('db1')
 
-    # TODO get joint estimates from classifier (e.g. neural network)
-    return joint_estimates
+    while(True):
+        emg.read()
+        if not emg.has_full_window():
+            continue
 
-def limit_joint_velocities(prev_joint_estimates, joint_estimates):
-    # TODO avoid sudden accelerations due to noise or wrong classifications
-    pass
+        values = emg.get_samples()
 
-def send_to_robot(joint_estimates, robot_config):
-    # TODO send new joint space pose to robot (ROS)
-    pass
+        # Preprocessing
+        sampling_rate = emg.sampling_rate()
+        if sampling_rate > 500:
+            values = filter_butterworth(values, 0, 500, sampling_rate)
 
+        cA2, cD2, cD1 = pywt.wavedec(values, wavelet, level=2, axis=0)
+        fA2 = calc_features(cA2)
+        fD2 = calc_features(cD2)
+        fD1 = calc_features(cD1)
+
+        ### Transform features into arm angles
+        # Feature vector should be of the shape [num_features * num_channels * 3]
+        # NOTE: order must be the same as when training the model!
+        features = np.stack([fA2, fD1, fD2], axis=1)
+        pitch, roll = model(features)
+
+        ### Move robot
+        robot.move(pitch, roll, relative=False)
+
+        # Keep part of this window and continue collecting
+        emg.clear(WINDOW_OVERLAP)
 
 
 if __name__ == '__main__':
-    # Configuration and metadata of the EMG source
-    emg_config = {
-        'source': 'dataset',
-        'derivatives': 16,
-        'samples_per_second': 100,
-        'moving_average_window': 50,
-    }
-    # Everything we need to connect to the robot and control it
-    robot_config = {
-        'ip': '192.168.2.1',
-        'port': 3000,
-    }
-
-    init_emg(emg_config)
-    init_robot(robot_config)
-
-    data = np.zeros((emg_config['moving_average_window'], emg_config['derivatives']))
-    prev_joint_estimates = None
-
-    while True:
-        try:
-            # MOHAMMED, dein Part :)
-            read_data(data, emg_config)
-            emg_filter(data, emg_config)
-            
-            # Tendenziell mein Part!
-            joint_estimates = emg_classify(data, emg_config)
-            limit_joint_velocities(prev_joint_estimates, joint_estimates)
-            send_to_robot(joint_estimates, robot_config)
-        except KeyboardInterrupt:
-            print('Terminated by user')
-            break
-        except Exception as e:
-            sys.exit(e)
-
-    sys.exit(0)
+    try:
+        # TODO parse cmd line arguments?
+        main(I2C_ADDRESSES, AI_MODEL_PATH, ROBOT_IP)
+    except KeyboardInterrupt:
+        print('Terminated by user')
+    except Exception as e:
+        sys.exit(e)
