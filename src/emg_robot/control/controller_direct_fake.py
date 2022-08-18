@@ -23,6 +23,7 @@ class DirectControllerFake(DirectController):
                  roll_thresholds = (0., 0., 0.1, 0.1, 0.1),
                  roll_f = 1.,
                  channel_aggregation_func = features.f_rms,
+                 activation_func = lambda x: x,
                  robot_velocity_f = 0.05,
                  max_joint_change_rad = 0.1):
         self.i2c_addresses = i2c_addresses
