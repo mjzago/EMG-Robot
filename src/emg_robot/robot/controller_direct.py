@@ -8,6 +8,14 @@ from .robot import RobotInterface
 
 
 
+def act_linear(values):
+    return values
+
+
+def act_sigmoid(values):
+    return 2. / (1. + np.exp(-values)) - 1.
+
+
 class DirectController():
     def __init__(self,
                  i2c_addresses,
@@ -22,6 +30,7 @@ class DirectController():
                  roll_thresholds = (0., 0., 0.1, 0.1, 0.1),
                  roll_f = 1.,
                  channel_aggregation_func = features.f_rms,
+                 activation_func = act_linear,
                  robot_velocity_f = 0.05,
                  max_joint_change_rad = 0.1):
         self.i2c_addresses = i2c_addresses
@@ -34,7 +43,9 @@ class DirectController():
         self.roll_weights = np.array(roll_weights)
         self.roll_thresholds = np.array(roll_thresholds)
         self.roll_f = roll_f
+
         self.channel_aggregation_func = channel_aggregation_func
+        self.activation_func = activation_func
 
         self.emg = EMGReader(emg_buffer_size, i2c_addresses)
         self.robot = RobotInterface(
@@ -55,8 +66,8 @@ class DirectController():
         pitch = features * (features > self.pitch_thresholds) * self.pitch_weights
         roll = features * (features > self.roll_thresholds) * self.roll_weights
 
-        pitch = np.sum(pitch) * self.pitch_f
-        roll = np.sum(roll) * self.roll_f
+        pitch = self.activation_func(np.sum(pitch) * self.pitch_f)
+        roll = self.activation_func(np.sum(roll) * self.roll_f)
 
         return pitch, roll
 

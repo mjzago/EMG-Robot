@@ -12,7 +12,7 @@ def create_weight_row(tab, row, name, w, th):
     label = ttk.Label(tab, text=name)
     label.grid(column=0, row=row, sticky="nw")
 
-    w_slider = tk.Scale(tab, variable=w_var, from_=-1., to=1., resolution=0.05, orient=tk.HORIZONTAL)
+    w_slider = tk.Scale(tab, variable=w_var, from_=-1., to=1., resolution=0.05, showvalue=False, orient=tk.HORIZONTAL)
     w_slider.grid(column=1, row=row, sticky="ew")
 
     w_spin = ttk.Spinbox(tab, textvariable=w_var, from_=-1., to=1., increment=0.05)
@@ -29,7 +29,7 @@ class DirectControllerGUI(tk.Tk):
                  controller,
                  channel_names):
         super().__init__()
-        ttk.Style(self).theme_use('default')
+        #ttk.Style(self).theme_use('default')
 
         self.controller = controller
         self.control_thread = None
@@ -44,7 +44,7 @@ class DirectControllerGUI(tk.Tk):
         self.roll_f = tk.DoubleVar(value = controller.roll_f)
 
         self.title("Control Weights")
-        self.geometry("640x350")
+        self.geometry("640x250")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Gains for transforming the emg signals
