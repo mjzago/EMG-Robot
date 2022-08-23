@@ -6,9 +6,10 @@ from emg_robot.preprocess import features
 from .controller_direct import DirectController
 
 
+# TODO create a base class and let this and the real direct controller inherit from it
 class DirectControllerFake(DirectController):
     '''
-    Just for testing as it avoids some imports that may fail
+    Just for testing as it avoids some imports that may fail (e.g. smbus)
     '''
     def __init__(self,
                  i2c_addresses,
@@ -43,7 +44,7 @@ class DirectControllerFake(DirectController):
     def calc_features(self, values):
         # Transform features into arm angles
         features = self.channel_aggregation_func(values)
-        # TODO create a GUI to adjust the weights live
+
         # It's basically a very simple perceptron without hidden neurons
         pitch = features * (features > self.pitch_thresholds) * self.pitch_weights
         roll = features * (features > self.roll_thresholds) * self.roll_weights
@@ -64,6 +65,9 @@ class DirectControllerFake(DirectController):
         self.running = True
         while (self.running):
             self.run_once()
+
+    def emg_activity(self):
+        return np.random.random([len(self.pitch_weights)])
 
     def stop(self):
         self.running = False

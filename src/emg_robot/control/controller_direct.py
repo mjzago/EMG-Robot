@@ -23,16 +23,16 @@ class DirectController():
                  emg_buffer_size = 2000,
                  emg_window_length_s = 0.1,
                  emg_window_overlap = 0.5,
-                 pitch_weights = (1., -1., 0., 0., 0.),
-                 pitch_thresholds = (0.1, 0.1, 0., 0., 0.),
-                 pitch_f = 1.,
-                 roll_weights = (0., 0., 1., -0.5, -0.5),
-                 roll_thresholds = (0., 0., 0.1, 0.1, 0.1),
-                 roll_f = 1.,
+                 pitch_weights = (0.9, -1., 0., 0., 0.),
+                 pitch_thresholds = (900., 800., 0., 0., 0.),
+                 pitch_f = 0.01,
+                 roll_weights = (0., 0., -0.7, 0.6, 0.6),
+                 roll_thresholds = (0., 0., 500., 500., 800.),
+                 roll_f = 0.01,
                  channel_aggregation_func = features.f_rms,
                  activation_func = act_linear,
                  robot_velocity_f = 0.05,
-                 max_joint_change_rad = 0.1):
+                 max_joint_change_rad = 0.01):
         self.i2c_addresses = i2c_addresses
         self.robot_ip = robot_ip
         self.emg_window_length_s = emg_window_length_s
@@ -61,7 +61,7 @@ class DirectController():
 
         # Transform features into arm angles
         features = self.channel_aggregation_func(values)
-        # TODO create a GUI to adjust the weights live
+
         # It's basically a very simple perceptron without hidden neurons
         pitch = features * (features > self.pitch_thresholds) * self.pitch_weights
         roll = features * (features > self.roll_thresholds) * self.roll_weights
@@ -101,6 +101,9 @@ class DirectController():
         self.running = True
         while (self.running):
             self.run_once()
+
+    def emg_activity(self):
+        return self.emg[-1]
 
     def stop(self):
         self.running = False

@@ -27,7 +27,7 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
-            "args": ["--control", "${workspaceFolder}/datasets/test"],
+            "args": ["--fake", "${workspaceFolder}/datasets/test"],
             "console": "integratedTerminal",
             "justMyCode": true
         },

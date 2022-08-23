@@ -30,12 +30,21 @@ def do_simulate(args):
     raise NotImplementedError()
 
 
-def do_control_direct(args):
+def do_fake_control(args):
     from emg_robot.control import start_gui
     from emg_robot.control.controller_direct_fake import DirectControllerFake
     from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP, EMG_CHANNEL_NAMES
     
     ctrl = DirectControllerFake(I2C_ADDRESSES, ROBOT_IP)
+    start_gui(ctrl, EMG_CHANNEL_NAMES)
+
+
+def do_control_direct(args):
+    from emg_robot.control import start_gui
+    from emg_robot.control.controller_direct import DirectController
+    from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP, EMG_CHANNEL_NAMES
+    
+    ctrl = DirectController(I2C_ADDRESSES, ROBOT_IP)
     start_gui(ctrl, EMG_CHANNEL_NAMES)
 
 
@@ -53,6 +62,8 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--simulate", dest="do_simulate", action='store_true',
                         help="Use a trained AI model to classify live EMG data without a robot attached "
                              "(load model from data_dir/)")
+    parser.add_argument("-f", "--fake", dest="do_fake_control", action='store_true',
+                        help="For testing: use a fake controller (no EMG readings, direct control GUI)")
     parser.add_argument("-c", "--control", dest="do_control", action='store_true',
                         help="Use a trained AI model to classify live EMG data and control a robot "
                              "(load model from data_dir/)")
@@ -70,14 +81,17 @@ if __name__ == '__main__':
     if args.do_recording:
         do_recording(args)
 
-    if args.do_preprocessing:
+    elif args.do_preprocessing:
         do_preprocessing(args)
 
-    if args.do_training:
+    elif args.do_training:
         do_training(args)
 
-    if args.do_simulate:
+    elif args.do_simulate:
         do_simulate(args)
 
-    if args.do_control:
+    elif args.do_fake_control:
+        do_fake_control(args)
+
+    elif args.do_control:
         do_control_direct(args)

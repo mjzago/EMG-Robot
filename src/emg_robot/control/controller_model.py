@@ -4,7 +4,6 @@ import pywt
 
 from emg_robot.defaults import I2C_ADDRESSES, ROBOT_IP
 from emg_robot.preprocess import filter_butterworth, all_features
-from emg_robot.learn import load_model
 from .emg_reader import EMGReader
 from .robot import RobotInterface
 
@@ -38,6 +37,7 @@ class ModelController():
         self.emg_window_length_s = emg_window_length_s
         self.emg_window_overlap = emg_window_overlap
 
+        from emg_robot.learn import load_model
         self.emg = EMGReader(emg_buffer_size, i2c_addresses)
         self.model = load_model(ai_model_path)
         self.robot = RobotInterface(robot_ip, robot_velocity_f, max_joint_change_rad)

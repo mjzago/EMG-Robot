@@ -44,7 +44,7 @@ class EMGBuffer():
     def clear(self, keep_ratio=0.0):
         b = self.buffer
         num_keep = min(b.shape[0], np.ceil(self.pos * keep_ratio))
-        b[:num_keep] = b[self.pos - num_keep:]
+        b[:num_keep] = b[self.pos - num_keep:self.pos]
         self.pos = num_keep
         # keep dt, m2 and n
 
@@ -56,6 +56,15 @@ class EMGBuffer():
 
     def __sizeof__(self) -> int:
         return self.pos
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            end = key
+        elif isinstance(key, slice):
+            end = key.stop
+        
+        if end >= self.pos:
+            raise IndexError(f"Index {key} is out of range")
 
 
 class EMGReader():
@@ -91,3 +100,6 @@ class EMGReader():
 
     def get_samples(self):
         return self.buffer.values()
+
+    def __getitem__(self, key):        
+        return self.buffer[key]
