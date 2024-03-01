@@ -1,3 +1,4 @@
+
 A0 = 0x48
 A1 = 0x49
 A2 = 0x4A
@@ -8,7 +9,10 @@ A6 = 0x4E
 A7 = 0x4F
 
 
+
+
 # Addresses of the EMG sensors to read on every cycle. Order matters! 
+
 I2C_ADDRESSES = [A4, A5, A2, A6, A0]
 EMG_CHANNEL_NAMES = ["biceps", "triceps", "pronator teres", "brachioradialis", "supinator"]
-ROBOT_IP = "192.168.2.12"
+ROBOT_IP = "172.16.0.2"

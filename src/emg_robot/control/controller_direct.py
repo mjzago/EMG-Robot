@@ -81,7 +81,6 @@ class DirectController():
         the pitch and roll differentials for the robot.
         '''
         self.emg.read()
-
         if not self.emg.has_full_window(self.emg_window_length_s):
             return
 

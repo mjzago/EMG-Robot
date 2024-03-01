@@ -11,7 +11,7 @@ def show(df):
     fig.show()
 
 if __name__ == '__main__':
-    df = pd.read_csv('recordings/data-test3.csv')
+    df = pd.read_csv('/home/robokind/EMG-Robot-Dataset/recordings/data-testebruno.csv')
     df = normalize(df[:])
     show(df)
 

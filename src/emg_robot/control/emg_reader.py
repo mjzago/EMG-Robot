@@ -80,6 +80,7 @@ class EMGReader():
     def read(self):
         r = self.buffer_row
         bus = self.bus
+        
 
         for idx, a in enumerate(self.channels):
             data = bus.read_i2c_block_data(a, 0, 2)
