@@ -12,11 +12,21 @@ A5 = 0x4D
 A6 = 0x4E
 A7 = 0x4F
 
+# Inicialização do objeto bus
 bus = smbus.SMBus(1)
-address = locals()[sys.argv[1]]
+
+addresses = []
+for a in sys.argv[1:-1]:
+    addresses.append(locals()[a])
+print(addresses)
 
 while True:
-    data = bus.read_i2c_block_data(address, 0, 2)
-    value = (data[0] << 8) | data[1]
-    print(value)
-    time.sleep(1)
+    for a in addresses:
+        try:
+            # Leia os dados do bloco I2C
+            data = bus.read_i2c_block_data(a, 0, 2)
+            value = (data[0] << 8) | data[1]
+            print(value)
+        except IOError as e:
+            print("Erro de I/O ao tentar ler dados do dispositivo:", e)
+        time.sleep(1)
