@@ -96,8 +96,10 @@ while True:
   values = []
 
   for a in addresses:
-#    print(a)
+    print(a)
     data = bus.read_i2c_block_data(a, 0, 2)
+    for x in range(len(data)):
+      print(data[x])
     values.append((data[0] << 8) | data[1])
 
 #  values += get_imu_acc(IMU)
