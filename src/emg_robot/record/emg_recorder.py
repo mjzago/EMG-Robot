@@ -103,7 +103,7 @@ while True:
 #  values += get_imu_acc(IMU)
 #  values += get_imu_gyro(IMU)
   values += get_imu_acc_raw(IMU)
-#  values += get_imu_gyro_raw(IMU)
+  values += get_imu_gyro_raw(IMU)
 
   # zeit für eine iteration
   
